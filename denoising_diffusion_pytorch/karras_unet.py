@@ -419,7 +419,8 @@ class KarrasUnet(Module):
         dim = 192,
         dim_max = 768,            # channels will double every downsample and cap out to this value
         num_classes = None,       # in paper, they do 1000 classes for a popular benchmark
-        channels = 4,             # 4 channels in paper for some reason, must be alpha channel?
+        in_channels = 3,             # 4 channels in paper for some reason, must be alpha channel?
+        out_channels = 3,          # 3 channels for RGBss
         num_downsamples = 3,
         num_blocks_per_stage = 4,
         attn_res = (16, 8),
@@ -439,16 +440,16 @@ class KarrasUnet(Module):
 
         # determine dimensions
 
-        self.channels = channels
+        self.channels = in_channels
         self.image_size = image_size
-        input_channels = channels * (2 if self_condition else 1)
+        input_channels = in_channels * (2 if self_condition else 1)
 
         # input and output blocks
 
         self.input_block = Conv2d(input_channels, dim, 3, concat_ones_to_input = True)
 
         self.output_block = nn.Sequential(
-            Conv2d(dim, channels, 3),
+            Conv2d(dim, out_channels, 3),
             Gain()
         )
 
@@ -548,7 +549,7 @@ class KarrasUnet(Module):
             Decoder(curr_dim, curr_dim, has_attn = mid_has_attn, **block_kwargs),
         ])
 
-        self.out_dim = channels
+        self.out_dim = in_channels
 
     @property
     def downsample_factor(self):
