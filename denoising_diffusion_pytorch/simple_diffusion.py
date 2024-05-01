@@ -313,7 +313,7 @@ class UViT(nn.Module):
         out_dim = None,
         dim_mults = (1, 2, 4, 8),
         downsample_factor = 2,
-        channels = 3,
+        in_channels = 3,
         vit_depth = 6,
         vit_dropout = 0.2,
         attn_dim_head = 32,
@@ -331,14 +331,15 @@ class UViT(nn.Module):
         # for initial dwt transform (or whatever transform researcher wants to try here)
 
         if exists(init_img_transform) and exists(final_img_itransform):
-            init_shape = torch.Size(1, 1, 32, 32)
+            init_shape = torch.Size((1, 3, 32, 32))
             mock_tensor = torch.randn(init_shape)
-            assert final_img_itransform(init_img_transform(mock_tensor)).shape == init_shape
+            reconstr = final_img_itransform(init_img_transform(mock_tensor))
+            assert reconstr.shape == init_shape, "shape mismatch {} {}".format(reconstr.shape, init_shape)
 
         self.init_img_transform = default(init_img_transform, identity)
         self.final_img_itransform = default(final_img_itransform, identity)
 
-        input_channels = channels
+        input_channels = in_channels
 
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
@@ -347,12 +348,12 @@ class UViT(nn.Module):
 
         self.unpatchify = identity
 
-        input_channels = channels * (patch_size ** 2)
+        input_channels = in_channels * (patch_size ** 2)
         needs_patch = patch_size > 1
 
         if needs_patch:
             if not dual_patchnorm:
-                self.init_conv = nn.Conv2d(channels, init_dim, patch_size, stride = patch_size)
+                self.init_conv = nn.Conv2d(in_channels, init_dim, patch_size, stride = patch_size)
             else:
                 self.init_conv = nn.Sequential(
                     Rearrange('b c (h p1) (w p2) -> b h w (c p1 p2)', p1 = patch_size, p2 = patch_size),
@@ -362,7 +363,7 @@ class UViT(nn.Module):
                     Rearrange('b h w c -> b c h w')
                 )
 
-            self.unpatchify = nn.ConvTranspose2d(input_channels, channels, patch_size, stride = patch_size)
+            self.unpatchify = nn.ConvTranspose2d(input_channels, out_dim, patch_size, stride = patch_size)
 
         # determine dimensions
 
@@ -429,6 +430,11 @@ class UViT(nn.Module):
             ]))
 
         default_out_dim = input_channels
+        
+        # fix the output dimension in patch case
+        if patch_size > 1:
+            out_dim = input_channels
+            
         self.out_dim = default(out_dim, default_out_dim)
 
         self.final_res_block = resnet_block(dim * 2, dim, time_emb_dim = time_dim)
